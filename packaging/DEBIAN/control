@@ -13,8 +13,8 @@ Description: PAM duress module - authenticate under coercion
  password instead of their real password, the PAM session succeeds
  (to avoid alerting an attacker), while silently executing a
  configurable script in the background.
-. 
+ . 
  This package includes:
-  - pam_duress.so   — PAM shared module (/lib/security/)
-  - duress_sign     — utility to sign duress scripts
-  - pam_test        — testing utility for PAM stacks
+  - pam_duress.so  (PAM shared module, /lib/security/)
+  - duress_sign    (utility to sign duress scripts)
+  - pam_test       (testing utility for PAM stacks)
