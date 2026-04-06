@@ -1,0 +1,20 @@
+Package: phosh-pam-duress
+Version: 1
+Architecture: arm64
+Maintainer: Sirr_Org
+Depends: libpam0g, libssl3
+Recommends: libpam-runtime
+Section: admin
+Priority: optional
+Homepage: https://github.com/Sirr-os/phosh-pam-duress
+Description: PAM duress module - authenticate under coercion
+ pam_duress is a PAM module that allows a system administrator to
+ define a duress password. When a user authenticates with the duress
+ password instead of their real password, the PAM session succeeds
+ (to avoid alerting an attacker), while silently executing a
+ configurable script in the background.
+. 
+ This package includes:
+  - pam_duress.so   — PAM shared module (/lib/security/)
+  - duress_sign     — utility to sign duress scripts
+  - pam_test        — testing utility for PAM stacks

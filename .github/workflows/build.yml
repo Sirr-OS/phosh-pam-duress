@@ -1,0 +1,76 @@
+name: Build and Release phosh-pam-duress
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  PKG_VERSION: 1.0.0
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install cross toolchain + arm64 dev libs
+        run: |
+          CODENAME="$(. /etc/os-release && echo "$UBUNTU_CODENAME")"
+
+          sudo apt-get update
+          sudo apt-get install -y \
+            gcc-aarch64-linux-gnu \
+            dpkg-dev \
+            pkg-config
+
+          # Add arm64 architecture
+          sudo dpkg --add-architecture arm64
+
+          # Pin existing sources to amd64 only — only lines that don't already have [...]
+          sudo sed -i '/^deb [^[]/ s/^deb /deb [arch=amd64] /' /etc/apt/sources.list
+          sudo sed -i '/^deb [^[]/ s/^deb /deb [arch=amd64] /' /etc/apt/sources.list.d/*.list 2>/dev/null || true
+          # DEB822 format (.sources) — add Architectures: amd64 if not present
+          for f in /etc/apt/sources.list.d/*.sources; do
+            [ -f "$f" ] || continue
+            grep -q "^Architectures:" "$f" || sudo sed -i '/^Types: deb/a Architectures: amd64' "$f"
+          done
+
+          # Add arm64 via ports.ubuntu.com only
+          echo "deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports ${CODENAME} main restricted universe multiverse"          | sudo tee -a /etc/apt/sources.list
+          echo "deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports ${CODENAME}-updates main restricted universe multiverse"  | sudo tee -a /etc/apt/sources.list
+          echo "deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports ${CODENAME}-security main restricted universe multiverse" | sudo tee -a /etc/apt/sources.list
+
+          sudo apt-get update
+          sudo apt-get install -y \
+            libpam0g-dev:arm64 \
+            libssl-dev:arm64
+
+      - name: Build
+        run: make
+
+      - name: Make packaging scripts executable
+        run: chmod +x packaging/scripts/build-deb.sh
+
+      - name: Build Debian package
+        run: bash packaging/scripts/build-deb.sh ${{ env.PKG_VERSION }} arm64
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: phosh-pam-duress-v${{ env.PKG_VERSION }}-arm64.deb
+          path: dist/*.deb
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: Release main build
+          files: dist/*.deb
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

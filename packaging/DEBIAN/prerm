@@ -1,0 +1,18 @@
+#!/bin/bash
+set -e
+
+PAM_FILE="/etc/pam.d/common-auth"
+MARKER="pam_duress.so"
+
+case "$1" in
+  remove|purge)
+    if grep -q "$MARKER" "$PAM_FILE"; then
+
+      sed -i "/$MARKER/d" "$PAM_FILE"
+
+      sed -i '/pam_unix\.so/ s/\[success=2 /[success=1 /' "$PAM_FILE"
+    fi
+    ;;
+esac
+
+exit 0

@@ -1,0 +1,19 @@
+#!/bin/bash
+set -e
+
+PAM_FILE="/etc/pam.d/common-auth"
+MARKER="pam_duress.so"
+
+case "$1" in
+  configure)
+    if ! grep -q "$MARKER" "$PAM_FILE"; then
+      cp "$PAM_FILE" "${PAM_FILE}.bak"
+
+      sed -i '/pam_unix\.so/ s/\[success=1 /[success=2 /' "$PAM_FILE"
+
+      sed -i '/pam_unix\.so/a auth\t[success=1 default=ignore]\tpam_duress.so' "$PAM_FILE"
+    fi
+    ;;
+esac
+
+exit 0
