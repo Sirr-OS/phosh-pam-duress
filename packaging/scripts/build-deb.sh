@@ -16,18 +16,21 @@ echo "==> Building ${PKG_NAME}_${VERSION}_${ARCH}.deb"
 # ── Directory layout inside the .deb ──────────────────────────────────────────
 LIB_SECURITY="${PKG_DIR}/lib/security"
 BIN_DIR="${PKG_DIR}/usr/local/bin"
+LIB_DIR="${PKG_DIR}/usr/local/lib"
 DEBIAN_DIR="${PKG_DIR}/DEBIAN"
 DURESS_D="${PKG_DIR}/etc/duress.d"
 
-mkdir -p "$LIB_SECURITY" "$BIN_DIR" "$DEBIAN_DIR" "$DURESS_D"
+mkdir -p "$LIB_SECURITY" "$BIN_DIR" "$LIB_DIR" "$DEBIAN_DIR" "$DURESS_D"
 
 # ── Copy build artifacts ───────────────────────────────────────────────────────
 echo "==> Copying build artifacts..."
-cp bin/pam_duress.so "$LIB_SECURITY/"
-cp bin/duress_sign   "$BIN_DIR/"
-cp bin/pam_test      "$BIN_DIR/"
+cp bin/pam_duress.so   "$LIB_SECURITY/"
+cp bin/duress_sign     "$BIN_DIR/"
+cp bin/pam_test        "$BIN_DIR/"
+cp bin/duress_helper   "$LIB_DIR/"
 
-$STRIP "$LIB_SECURITY/pam_duress.so" "$BIN_DIR/duress_sign" "$BIN_DIR/pam_test"
+$STRIP "$LIB_SECURITY/pam_duress.so" "$BIN_DIR/duress_sign" \
+       "$BIN_DIR/pam_test" "$LIB_DIR/duress_helper"
 
 # ── Copy example duress scripts ────────────────────────────────────────────────
 echo "==> Copying duress scripts..."
@@ -51,6 +54,7 @@ chmod 0755 "$DEBIAN_DIR/postinst" "$DEBIAN_DIR/prerm"
 chmod 0755 "$LIB_SECURITY/pam_duress.so"
 chmod 0755 "$BIN_DIR/duress_sign"
 chmod 0755 "$BIN_DIR/pam_test"
+chmod 0755 "$LIB_DIR/duress_helper"
 
 # ── Build .deb ─────────────────────────────────────────────────────────────────
 mkdir -p "$DIST_DIR"

@@ -3,16 +3,31 @@ set -e
 
 PAM_FILE="/etc/pam.d/common-auth"
 MARKER="pam_duress.so"
+HELPER="/usr/local/lib/duress_helper"
+PAM_ARCH_DIR="/usr/lib/aarch64-linux-gnu/security"
 
 case "$1" in
   configure)
+    # ── Setuid bit on  helper ──────────────────────────────────────────────────
+    if [ -f "$HELPER" ]; then
+      chown root:root "$HELPER"
+      chmod 4755 "$HELPER"
+    fi
+
+    # ── Copy pam_duress.so to the path aarch64 if exist ────────────────────────
+    if [ -f "/lib/security/pam_duress.so" ] && [ -d "$PAM_ARCH_DIR" ]; then
+      cp /lib/security/pam_duress.so "$PAM_ARCH_DIR/pam_duress.so"
+    fi
+
+    # ── Modification common-auth if not already changed  ───────────────────────
     if ! grep -q "$MARKER" "$PAM_FILE"; then
       cp "$PAM_FILE" "${PAM_FILE}.bak"
-
       sed -i '/pam_unix\.so/ s/\[success=1 /[success=2 /' "$PAM_FILE"
-
       sed -i '/pam_unix\.so/a auth\t[success=1 default=ignore]\tpam_duress.so' "$PAM_FILE"
     fi
+
+    # ── Create Global directory ────────────────────────────────────────────────
+    mkdir -p /etc/duress.d
     ;;
 esac
 
