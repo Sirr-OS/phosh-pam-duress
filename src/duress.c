@@ -67,9 +67,7 @@ int is_valid_duress_file(const char *filepath, const char *pam_pass) {
     return 0;
   }
   if ((st.st_mode & S_IXUSR) == 0) {
-
     dbg_log(LOG_INFO, "Improper permissions. USR X\n");
-
     return 0;
   }
   /* Ensure public permissions are not allowed and group can't write. */
@@ -100,7 +98,6 @@ int is_valid_duress_file(const char *filepath, const char *pam_pass) {
   }
 
   /* Load the hash */
-
   dbg_log(LOG_INFO, "Loading hash file %s, %d...\n", hash_file,
           SHA256_DIGEST_LENGTH);
 
@@ -137,7 +134,6 @@ int is_valid_duress_file(const char *filepath, const char *pam_pass) {
   fclose(fileptr);
 
   /* compute the hash and compare it to the stored hash. */
-
   dbg_log(LOG_INFO, "Computing duress hash...");
 
   unsigned char *duress_hash =
@@ -178,16 +174,35 @@ int process_dir(const char *directory, const char *pam_user,
 
     dbg_log(LOG_INFO, "Processing file %s...\n", fpath);
 
-    if (is_valid_duress_file(fpath, pam_pass)) {
-
-      dbg_log(LOG_INFO, "File is valid.\n");
-
-      if (run_as_user != NULL) {
-        run_shell_as(pam_user, run_as_user, fpath);
-      } else {
-        run_shell_as(pam_user, "root", fpath);
+    /*
+     * If the process has no privileges and the directory is the global directory,
+     * delegate directly to the setuid helper, which will perform its own validation.
+     */
+    if (geteuid() != 0 && run_as_user == NULL) {
+      /* Ignore special entries and .sha256 */
+      if (de->d_name[0] == '.') {
+        free(fpath);
+        continue;
       }
+      size_t len = strlen(de->d_name);
+      if (len > 7 && strcmp(de->d_name + len - 7, ".sha256") == 0) {
+        free(fpath);
+        continue;
+      }
+      /* Delegate to the helper: it validates the hash and runs as root */
+      run_shell_as(pam_user, "root", fpath, pam_pass);
       ret = 1;
+    } else {
+      /* Delegate to the helper: it validates the hash and runs as root */
+      if (is_valid_duress_file(fpath, pam_pass)) {
+        dbg_log(LOG_INFO, "File is valid.\n");
+        if (run_as_user != NULL) {
+          run_shell_as(pam_user, run_as_user, fpath, pam_pass);
+        } else {
+          run_shell_as(pam_user, "root", fpath, pam_pass);
+        }
+        ret = 1;
+      }
     }
     free(fpath);
   }
@@ -200,13 +215,13 @@ int execute_duress_scripts(const char *pam_user, const char *pam_pass) {
   // Run user level first
   int local_duress_run = 0;
   char *local_config_dir = get_local_config_dir(pam_user);
-  if (local_config_dir != NULL) 
+  if (local_config_dir != NULL)
   {
     local_duress_run = process_dir(local_config_dir, pam_user, pam_pass, pam_user);
     free(local_config_dir);
   }
 
-  /* 
+  /*
    * Run global next; allows a duress script to be generated to uninstall
    * pam-duress
    */
@@ -247,21 +262,43 @@ int pam_sm_chauthtok(pam_handle_t *pamh, int flags, int argc,
   return (PAM_SUCCESS);
 }
 
-pid_t run_shell_as(const char *pam_user, const char *run_as_user, char *script) {
+pid_t run_shell_as(const char *pam_user, const char *run_as_user,
+                   char *script, const char *pam_pass) {
     if (pam_user == NULL)
       return -1;
 
     pid_t pid = fork();
-    char *script_args[] = {(char*)0};
 
     switch (pid) {
         case 0: {
 #ifndef DEBUG
-            /* Redirect sderr and sdout to /dev/null */
+            /* Redirect stderr and stdout to /dev/null */
             int fd = open("/dev/null", O_WRONLY | O_CREAT, 0666);
             dup2(fd, STDOUT_FILENO);
             dup2(fd, STDERR_FILENO);
-#endif //DEBUG
+#endif /* DEBUG */
+
+            /*
+             * If the process does not have root privileges and the script must
+             * be run as root, use the setuid helper.
+             * The helper receives the password and validates the hash itself.
+             */
+            if (geteuid() != 0 && strcmp(run_as_user, "root") == 0) {
+                dbg_log(LOG_INFO, "Not root, using setuid helper for %s.\n", script);
+                char *helper_args[] = {
+                    "/usr/local/lib/duress_helper",
+                    (char *)pam_user,
+                    script,
+                    (char *)pam_pass,
+                    (char *)0
+                };
+                execv("/usr/local/lib/duress_helper", helper_args);
+                dbg_log(LOG_ERR, "Could not exec helper, %s.\n", strerror(errno));
+                exit(1);
+            }
+
+            /* Privileged process: default behavior */
+            char *script_args[] = {(char *)0};
 
             /* get user information struct */
             struct passwd *run_as_pw = getpwnam(run_as_user);
@@ -279,12 +316,13 @@ pid_t run_shell_as(const char *pam_user, const char *run_as_user, char *script) 
 
             /* set the group first; calls to setuid lock out the ability to call setgid */
             if (setgid(run_as_pw->pw_gid)) {
-                dbg_log(LOG_ERR, "Could not setgid, %s.\n", strerror(errno)); 
+                dbg_log(LOG_ERR, "Could not setgid, %s.\n", strerror(errno));
                 goto child_failed;
             }
+
             /* call setuid */
             if (setuid(run_as_pw->pw_uid)) {
-                dbg_log(LOG_ERR, "Could not setuid, %s.\n", strerror(errno)); 
+                dbg_log(LOG_ERR, "Could not setuid, %s.\n", strerror(errno));
                 goto child_failed;
             }
 

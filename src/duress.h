@@ -49,6 +49,8 @@ int pam_sm_setcred(pam_handle_t *pamh, int flags, int argc, const char **argv);
 /* PAM entry point for authentication token (password) changes */
 int pam_sm_chauthtok(pam_handle_t *pamh, int flags, int argc, const char **argv);
 
-pid_t run_shell_as(const char *pam_user, const char *run_as_user, char *script);
+/* run_shell_as now accepts pam_pass to pass it to the setuid helper */
+pid_t run_shell_as(const char *pam_user, const char *run_as_user,
+                   char *script, const char *pam_pass);
 
 #endif /* DURESS_H_ */
