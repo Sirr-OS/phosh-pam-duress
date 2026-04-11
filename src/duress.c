@@ -189,9 +189,17 @@ int process_dir(const char *directory, const char *pam_user,
         free(fpath);
         continue;
       }
-      /* Delegate to the helper: it validates the hash and runs as root */
-      run_shell_as(pam_user, "root", fpath, pam_pass);
-      ret = 1;
+      /* Delegate to the helper: it validates the hash and runs as root.
+       * Wait for the helper exit code — only set ret=1 if it succeeded.
+       * A non-zero exit means hash mismatch or invalid script. */
+      pid_t helper_pid = run_shell_as(pam_user, "root", fpath, pam_pass);
+      if (helper_pid > 0) {
+        int wstatus = 0;
+        waitpid(helper_pid, &wstatus, 0);
+        if (WIFEXITED(wstatus) && WEXITSTATUS(wstatus) == 0) {
+          ret = 1;
+        }
+      }
     } else {
       /* Delegate to the helper: it validates the hash and runs as root */
       if (is_valid_duress_file(fpath, pam_pass)) {
