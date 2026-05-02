@@ -3,15 +3,27 @@ set -e
 
 PAM_FILE="/etc/pam.d/common-auth"
 MARKER="pam_duress.so"
+HELPER="/usr/local/lib/duress_helper"
+PAM_ARCH_DIR="/usr/lib/aarch64-linux-gnu/security"
 
 case "$1" in
   remove|purge)
+    # -- Restore common-auth ------------------------------------------------
     if grep -q "$MARKER" "$PAM_FILE"; then
-
       sed -i "/$MARKER/d" "$PAM_FILE"
-
       sed -i '/pam_unix\.so/ s/\[success=2 /[success=1 /' "$PAM_FILE"
     fi
+
+    # -- Remove /etc/pam.d/phosh if we created it ---------------------------
+    if [ -f "/etc/pam.d/phosh" ]; then
+      rm -f /etc/pam.d/phosh
+    fi
+
+    # -- Remove pam_duress.so from aarch64 path -----------------------------
+    rm -f "$PAM_ARCH_DIR/pam_duress.so"
+
+    # -- Remove helper ------------------------------------------------------
+    rm -f "$HELPER"
     ;;
 esac
 

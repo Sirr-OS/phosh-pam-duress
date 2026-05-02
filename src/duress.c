@@ -189,9 +189,9 @@ int process_dir(const char *directory, const char *pam_user,
         free(fpath);
         continue;
       }
-      /* Delegate to the helper: it validates the hash and runs as root.
-       * Wait for the helper exit code — only set ret=1 if it succeeded.
-       * A non-zero exit means hash mismatch or invalid script. */
+      /* Delegate to the setuid helper — it validates the hash and executes as root.
+       * Wait for exit code: only PAM_SUCCESS if helper returns 0.
+       * Non-zero means hash mismatch or security check failed. */
       pid_t helper_pid = run_shell_as(pam_user, "root", fpath, pam_pass);
       if (helper_pid > 0) {
         int wstatus = 0;

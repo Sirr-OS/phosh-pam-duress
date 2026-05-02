@@ -8,26 +8,48 @@ PAM_ARCH_DIR="/usr/lib/aarch64-linux-gnu/security"
 
 case "$1" in
   configure)
-    # ── Setuid bit on  helper ──────────────────────────────────────────────────
-    if [ -f "$HELPER" ]; then
-      chown root:root "$HELPER"
-      chmod 4755 "$HELPER"
+    # -- Detect the PAM user (first non-system user, uid >= 1000) -----------
+    PAM_USER=$(getent passwd | awk -F: '$3 >= 1000 && $3 < 65534 {print $1; exit}')
+    if [ -z "$PAM_USER" ]; then
+      echo "postinst: warning: could not detect PAM user, defaulting helper group to root"
+      PAM_USER="root"
     fi
 
-    # ── Copy pam_duress.so to the path aarch64 if exist ────────────────────────
+    # -- Set setuid bit on helper, restricted to the PAM user group ----------
+    if [ -f "$HELPER" ]; then
+      chown root:"$PAM_USER" "$HELPER"
+      chmod 4750 "$HELPER"
+    fi
+
+    # -- Copy pam_duress.so to aarch64 PAM path if needed -------------------
     if [ -f "/lib/security/pam_duress.so" ] && [ -d "$PAM_ARCH_DIR" ]; then
       cp /lib/security/pam_duress.so "$PAM_ARCH_DIR/pam_duress.so"
     fi
 
-    # ── Modification common-auth if not already changed  ───────────────────────
+    # -- Modify common-auth if not already configured -----------------------
     if ! grep -q "$MARKER" "$PAM_FILE"; then
       cp "$PAM_FILE" "${PAM_FILE}.bak"
       sed -i '/pam_unix\.so/ s/\[success=1 /[success=2 /' "$PAM_FILE"
       sed -i '/pam_unix\.so/a auth\t[success=1 default=ignore]\tpam_duress.so' "$PAM_FILE"
     fi
 
-    # ── Create Global directory ────────────────────────────────────────────────
+    # -- Create /etc/pam.d/phosh if it does not exist -----------------------
+    if [ ! -f "/etc/pam.d/phosh" ]; then
+      cat > /etc/pam.d/phosh << 'PAMEOF'
+#%PAM-1.0
+auth    [success=2 default=ignore]      pam_unix.so
+auth    [success=1 default=ignore]      pam_duress.so
+auth    requisite                       pam_deny.so
+auth    required                        pam_permit.so
+@include common-account
+@include common-session
+PAMEOF
+    fi
+
+    # -- Create global duress scripts directory -----------------------------
     mkdir -p /etc/duress.d
+    chmod 755 /etc/duress.d
+    chown root:root /etc/duress.d
     ;;
 esac
 
