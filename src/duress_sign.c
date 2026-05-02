@@ -68,6 +68,15 @@ int main(int argc, const char *argv[])
     /* Write the hash to [FILE].sha256 */
     write_file_hash(argv[1], hash);
 
+    /* Enforce 0400 permissions on the hash file immediately after writing.
+     * The execute bit has no meaning on a data file. Least privilege. */
+    char *hash_filename = get_hash_filename(argv[1]);
+    if (hash_filename != NULL) {
+        if (chmod(hash_filename, 0400) != 0)
+            printf("Warning: could not set permissions on %s\n", hash_filename);
+        free(hash_filename);
+    }
+
     /* Free up the hash allocation */
     free(hash);
     
